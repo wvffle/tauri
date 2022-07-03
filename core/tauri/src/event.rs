@@ -2,15 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
 
-use std::{
-  boxed::Box,
-  cell::Cell,
-  collections::HashMap,
-  fmt,
-  hash::Hash,
-  sync::{Arc, Mutex},
-};
+use std::{boxed::Box, cell::Cell, collections::HashMap, fmt, hash::Hash, sync::Arc};
 use uuid::Uuid;
+use parking_lot::Mutex;
 
 /// Checks if an event name is valid.
 pub fn is_event_name_valid(event: &str) -> bool {
@@ -119,7 +113,6 @@ impl Listeners {
       .inner
       .pending
       .lock()
-      .expect("poisoned pending event queue")
       .push(action)
   }
 
@@ -129,8 +122,7 @@ impl Listeners {
       let mut lock = self
         .inner
         .pending
-        .lock()
-        .expect("poisoned pending event queue");
+        .lock();
       std::mem::take(&mut *lock)
     };
 
@@ -145,8 +137,8 @@ impl Listeners {
 
   fn listen_(&self, id: EventHandler, event: String, handler: Handler) {
     match self.inner.handlers.try_lock() {
-      Err(_) => self.insert_pending(Pending::Listen(id, event, handler)),
-      Ok(mut lock) => {
+      None => self.insert_pending(Pending::Listen(id, event, handler)),
+      Some(mut lock) => {
         lock.entry(event).or_default().insert(id, handler);
       }
     }
@@ -192,8 +184,8 @@ impl Listeners {
   /// Removes an event listener.
   pub(crate) fn unlisten(&self, handler_id: EventHandler) {
     match self.inner.handlers.try_lock() {
-      Err(_) => self.insert_pending(Pending::Unlisten(handler_id)),
-      Ok(mut lock) => lock.values_mut().for_each(|handler| {
+      None => self.insert_pending(Pending::Unlisten(handler_id)),
+      Some(mut lock) => lock.values_mut().for_each(|handler| {
         handler.remove(&handler_id);
       }),
     }
@@ -203,8 +195,8 @@ impl Listeners {
   pub(crate) fn trigger(&self, event: &str, window: Option<String>, payload: Option<String>) {
     let mut maybe_pending = false;
     match self.inner.handlers.try_lock() {
-      Err(_) => self.insert_pending(Pending::Trigger(event.to_owned(), window, payload)),
-      Ok(lock) => {
+      None => self.insert_pending(Pending::Trigger(event.to_owned(), window, payload)),
+      Some(lock) => {
         if let Some(handlers) = lock.get(event) {
           for (&id, handler) in handlers {
             if handler.window.is_none() || window == handler.window {
@@ -248,7 +240,7 @@ mod test {
       listeners.listen(e, None, event_fn);
 
       // lock mutex
-      let l = listeners.inner.handlers.lock().unwrap();
+      let l = listeners.inner.handlers.lock();
 
       // check if the generated key is in the map
       assert!(l.contains_key(&key));
@@ -264,7 +256,7 @@ mod test {
        listeners.listen(e, None, event_fn);
 
        // lock mutex
-       let mut l = listeners.inner.handlers.lock().unwrap();
+       let mut l = listeners.inner.handlers.lock();
 
        // check if l contains key
        if l.contains_key(&key) {
@@ -292,7 +284,7 @@ mod test {
       listeners.trigger(&e, None, Some(d));
 
       // lock the mutex
-      let l = listeners.inner.handlers.lock().unwrap();
+      let l = listeners.inner.handlers.lock();
 
       // assert that the key is contained in the listeners map
       assert!(l.contains_key(&key));

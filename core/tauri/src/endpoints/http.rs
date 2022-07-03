@@ -10,10 +10,8 @@ use serde::Deserialize;
 use tauri_macros::{command_enum, module_command_handler, CommandModule};
 
 #[cfg(http_request)]
-use std::{
-  collections::HashMap,
-  sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
+use parking_lot::Mutex;
 
 #[cfg(http_request)]
 use crate::api::http::{ClientBuilder, HttpRequestBuilder, ResponseData};
@@ -63,7 +61,7 @@ impl Cmd {
     options: Option<ClientBuilder>,
   ) -> super::Result<ClientId> {
     let client = options.unwrap_or_default().build()?;
-    let mut store = clients().lock().unwrap();
+    let mut store = clients().lock();
     let id = rand::random::<ClientId>();
     store.insert(id, client);
     Ok(id)
@@ -74,7 +72,7 @@ impl Cmd {
     _context: InvokeContext<R>,
     client: ClientId,
   ) -> super::Result<()> {
-    let mut store = clients().lock().unwrap();
+    let mut store = clients().lock();
     store.remove(&client);
     Ok(())
   }
@@ -90,7 +88,6 @@ impl Cmd {
     if scopes.http.is_allowed(&options.url) {
       let client = clients()
         .lock()
-        .unwrap()
         .get(&client_id)
         .ok_or_else(|| crate::Error::HttpClientNotInitialized.into_anyhow())?
         .clone();

@@ -7,9 +7,11 @@ use std::{
   io::{BufReader, Write},
   path::PathBuf,
   process::{Command as StdCommand, Stdio},
-  sync::{Arc, Mutex, RwLock},
+  sync::Arc,
   thread::spawn,
 };
+
+use parking_lot::{Mutex, RwLock};
 
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
@@ -36,7 +38,7 @@ fn commands() -> &'static ChildStore {
 /// Kills all child processes created with [`Command`].
 /// By default it's called before the [`crate::App`] exits.
 pub fn kill_children() {
-  let commands = commands().lock().unwrap();
+  let commands = commands().lock();
   let children = commands.values();
   for child in children {
     let _ = child.kill();
@@ -255,7 +257,7 @@ impl Command {
     let child_ = child.clone();
     let guard = Arc::new(RwLock::new(()));
 
-    commands().lock().unwrap().insert(child.id(), child.clone());
+    commands().lock().insert(child.id(), child.clone());
 
     let (tx, rx) = channel(1);
 
@@ -275,8 +277,8 @@ impl Command {
     spawn(move || {
       let _ = match child_.wait() {
         Ok(status) => {
-          let _l = guard.write().unwrap();
-          commands().lock().unwrap().remove(&child_.id());
+          let _l = guard.write();
+          commands().lock().remove(&child_.id());
           block_on_task(async move {
             tx.send(CommandEvent::Terminated(TerminatedPayload {
               code: status.code(),
@@ -289,7 +291,7 @@ impl Command {
           })
         }
         Err(e) => {
-          let _l = guard.write().unwrap();
+          let _l = guard.write();
           block_on_task(async move { tx.send(CommandEvent::Error(e.to_string())).await })
         }
       };
@@ -380,7 +382,7 @@ fn spawn_pipe_reader<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
   wrapper: F,
 ) {
   spawn(move || {
-    let _lock = guard.read().unwrap();
+    let _lock = guard.read();
     let mut reader = BufReader::new(pipe_reader);
 
     let mut buf = Vec::new();

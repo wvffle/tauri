@@ -16,9 +16,11 @@ use crate::ExecuteArgs;
 #[cfg(not(shell_scope))]
 type ExecuteArgs = ();
 
-#[cfg(any(shell_execute, shell_sidecar))]
-use std::sync::{Arc, Mutex};
 use std::{collections::HashMap, path::PathBuf};
+use std::sync::Arc;
+
+#[cfg(any(shell_execute, shell_sidecar))]
+use parking_lot::Mutex;
 
 type ChildId = u32;
 #[cfg(any(shell_execute, shell_sidecar))]
@@ -151,12 +153,12 @@ impl Cmd {
       let (mut rx, child) = command.spawn()?;
 
       let pid = child.pid();
-      command_childs().lock().unwrap().insert(pid, child);
+      command_childs().lock().insert(pid, child);
 
       crate::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
           if matches!(event, crate::api::process::CommandEvent::Terminated(_)) {
-            command_childs().lock().unwrap().remove(&pid);
+            command_childs().lock().remove(&pid);
           }
           let js = crate::api::ipc::format_callback(on_event_fn, &event)
             .expect("unable to serialize CommandEvent");
@@ -175,7 +177,7 @@ impl Cmd {
     pid: ChildId,
     buffer: Buffer,
   ) -> super::Result<()> {
-    if let Some(child) = command_childs().lock().unwrap().get_mut(&pid) {
+    if let Some(child) = command_childs().lock().get_mut(&pid) {
       match buffer {
         Buffer::Text(t) => child.write(t.as_bytes())?,
         Buffer::Raw(r) => child.write(&r)?,
@@ -186,7 +188,7 @@ impl Cmd {
 
   #[module_command_handler(shell_script)]
   fn kill_child<R: Runtime>(_context: InvokeContext<R>, pid: ChildId) -> super::Result<()> {
-    if let Some(child) = command_childs().lock().unwrap().remove(&pid) {
+    if let Some(child) = command_childs().lock().remove(&pid) {
       child.kill()?;
     }
     Ok(())

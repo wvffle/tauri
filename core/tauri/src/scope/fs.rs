@@ -6,9 +6,10 @@ use std::{
   collections::{HashMap, HashSet},
   fmt,
   path::{Path, PathBuf},
-  sync::{Arc, Mutex},
+  sync::Arc,
 };
 
+use parking_lot::Mutex;
 pub use glob::Pattern;
 use tauri_utils::{
   config::{Config, FsAllowlistScope},
@@ -45,7 +46,6 @@ impl fmt::Debug for Scope {
         &self
           .alllowed_patterns
           .lock()
-          .unwrap()
           .iter()
           .map(|p| p.as_str())
           .collect::<Vec<&str>>(),
@@ -55,7 +55,6 @@ impl fmt::Debug for Scope {
         &self
           .forbidden_patterns
           .lock()
-          .unwrap()
           .iter()
           .map(|p| p.as_str())
           .collect::<Vec<&str>>(),
@@ -111,23 +110,23 @@ impl Scope {
 
   /// The list of allowed patterns.
   pub fn allowed_patterns(&self) -> HashSet<Pattern> {
-    self.alllowed_patterns.lock().unwrap().clone()
+    self.alllowed_patterns.lock().clone()
   }
 
   /// The list of forbidden patterns.
   pub fn forbidden_patterns(&self) -> HashSet<Pattern> {
-    self.forbidden_patterns.lock().unwrap().clone()
+    self.forbidden_patterns.lock().clone()
   }
 
   /// Listen to an event on this scope.
   pub fn listen<F: Fn(&Event) + Send + 'static>(&self, f: F) -> Uuid {
     let id = Uuid::new_v4();
-    self.event_listeners.lock().unwrap().insert(id, Box::new(f));
+    self.event_listeners.lock().insert(id, Box::new(f));
     id
   }
 
   fn trigger(&self, event: Event) {
-    let listeners = self.event_listeners.lock().unwrap();
+    let listeners = self.event_listeners.lock();
     let handlers = listeners.values();
     for listener in handlers {
       listener(&event);
@@ -141,7 +140,7 @@ impl Scope {
   pub fn allow_directory<P: AsRef<Path>>(&self, path: P, recursive: bool) -> crate::Result<()> {
     let path = path.as_ref().to_path_buf();
     {
-      let mut list = self.alllowed_patterns.lock().unwrap();
+      let mut list = self.alllowed_patterns.lock();
 
       // allow the directory to be read
       push_pattern(&mut list, &path)?;
@@ -157,7 +156,7 @@ impl Scope {
   /// After this function has been called, the frontend will be able to use the Tauri API to read the contents of this file.
   pub fn allow_file<P: AsRef<Path>>(&self, path: P) -> crate::Result<()> {
     let path = path.as_ref();
-    push_pattern(&mut self.alllowed_patterns.lock().unwrap(), &path)?;
+    push_pattern(&mut self.alllowed_patterns.lock(), &path)?;
     self.trigger(Event::PathAllowed(path.to_path_buf()));
     Ok(())
   }
@@ -168,7 +167,7 @@ impl Scope {
   pub fn forbid_directory<P: AsRef<Path>>(&self, path: P, recursive: bool) -> crate::Result<()> {
     let path = path.as_ref().to_path_buf();
     {
-      let mut list = self.forbidden_patterns.lock().unwrap();
+      let mut list = self.forbidden_patterns.lock();
 
       // allow the directory to be read
       push_pattern(&mut list, &path)?;
@@ -184,7 +183,7 @@ impl Scope {
   /// **Note:** this takes precedence over allowed paths, so its access gets denied **always**.
   pub fn forbid_file<P: AsRef<Path>>(&self, path: P) -> crate::Result<()> {
     let path = path.as_ref();
-    push_pattern(&mut self.forbidden_patterns.lock().unwrap(), &path)?;
+    push_pattern(&mut self.forbidden_patterns.lock(), &path)?;
     self.trigger(Event::PathForbidden(path.to_path_buf()));
     Ok(())
   }
@@ -204,7 +203,6 @@ impl Scope {
       let forbidden = self
         .forbidden_patterns
         .lock()
-        .unwrap()
         .iter()
         .any(|p| p.matches_path(&path));
 
@@ -214,7 +212,6 @@ impl Scope {
         let allowed = self
           .alllowed_patterns
           .lock()
-          .unwrap()
           .iter()
           .any(|p| p.matches_path(&path));
         allowed

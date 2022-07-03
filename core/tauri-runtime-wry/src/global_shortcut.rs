@@ -9,9 +9,10 @@ use std::{
   fmt,
   sync::{
     mpsc::{channel, Sender},
-    Arc, Mutex,
+    Arc,
   },
 };
+use parking_lot::Mutex;
 
 use crate::{getter, Context, Message};
 
@@ -83,11 +84,10 @@ impl<T: UserEvent> GlobalShortcutManager for GlobalShortcutManagerHandle<T> {
       Message::GlobalShortcut(GlobalShortcutMessage::Register(wry_accelerator, tx))
     )??;
 
-    self.listeners.lock().unwrap().insert(id, Box::new(handler));
+    self.listeners.lock().insert(id, Box::new(handler));
     self
       .shortcuts
       .lock()
-      .unwrap()
       .insert(accelerator.into(), (id, shortcut));
 
     Ok(())
@@ -100,20 +100,20 @@ impl<T: UserEvent> GlobalShortcutManager for GlobalShortcutManagerHandle<T> {
       rx,
       Message::GlobalShortcut(GlobalShortcutMessage::UnregisterAll(tx))
     )??;
-    self.listeners.lock().unwrap().clear();
-    self.shortcuts.lock().unwrap().clear();
+    self.listeners.lock().clear();
+    self.shortcuts.lock().clear();
     Ok(())
   }
 
   fn unregister(&mut self, accelerator: &str) -> Result<()> {
-    if let Some((accelerator_id, shortcut)) = self.shortcuts.lock().unwrap().remove(accelerator) {
+    if let Some((accelerator_id, shortcut)) = self.shortcuts.lock().remove(accelerator) {
       let (tx, rx) = channel();
       getter!(
         self,
         rx,
         Message::GlobalShortcut(GlobalShortcutMessage::Unregister(shortcut, tx))
       )??;
-      self.listeners.lock().unwrap().remove(&accelerator_id);
+      self.listeners.lock().remove(&accelerator_id);
     }
     Ok(())
   }
@@ -128,7 +128,6 @@ pub fn handle_global_shortcut_message(
       .send(
         global_shortcut_manager
           .lock()
-          .unwrap()
           .is_registered(&accelerator),
       )
       .unwrap(),
@@ -136,7 +135,6 @@ pub fn handle_global_shortcut_message(
       .send(
         global_shortcut_manager
           .lock()
-          .unwrap()
           .register(accelerator)
           .map(GlobalShortcutWrapper)
           .map_err(|e| Error::GlobalShortcut(Box::new(e))),
@@ -146,7 +144,6 @@ pub fn handle_global_shortcut_message(
       .send(
         global_shortcut_manager
           .lock()
-          .unwrap()
           .unregister(shortcut.0)
           .map_err(|e| Error::GlobalShortcut(Box::new(e))),
       )
@@ -155,7 +152,6 @@ pub fn handle_global_shortcut_message(
       .send(
         global_shortcut_manager
           .lock()
-          .unwrap()
           .unregister_all()
           .map_err(|e| Error::GlobalShortcut(Box::new(e))),
       )

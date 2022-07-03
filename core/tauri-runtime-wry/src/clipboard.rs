@@ -8,8 +8,9 @@ use crate::{getter, Context, Message};
 
 use std::sync::{
   mpsc::{channel, Sender},
-  Arc, Mutex,
+  Arc,
 };
+use parking_lot::Mutex;
 
 use tauri_runtime::{ClipboardManager, Result, UserEvent};
 pub use wry::application::clipboard::Clipboard;
@@ -52,11 +53,11 @@ pub fn handle_clipboard_message(
 ) {
   match message {
     ClipboardMessage::WriteText(text, tx) => {
-      clipboard_manager.lock().unwrap().write_text(text);
+      clipboard_manager.lock().write_text(text);
       tx.send(()).unwrap();
     }
     ClipboardMessage::ReadText(tx) => tx
-      .send(clipboard_manager.lock().unwrap().read_text())
+      .send(clipboard_manager.lock().read_text())
       .unwrap(),
   }
 }

@@ -17,8 +17,9 @@ use std::{
   collections::{HashMap, HashSet},
   hash::{Hash, Hasher},
   path::PathBuf,
-  sync::{mpsc::Sender, Arc, Mutex},
+  sync::{mpsc::Sender, Arc},
 };
+use parking_lot::Mutex;
 
 type UriSchemeProtocol =
   dyn Fn(&HttpRequest) -> Result<HttpResponse, Box<dyn std::error::Error>> + Send + Sync + 'static;
@@ -310,7 +311,7 @@ impl<T: UserEvent, R: Runtime<T>> PendingWindow<T, R> {
   pub fn set_menu(mut self, menu: Menu) -> Self {
     let mut menu_ids = HashMap::new();
     get_menu_ids(&mut menu_ids, &menu);
-    *self.menu_ids.lock().unwrap() = menu_ids;
+    *self.menu_ids.lock() = menu_ids;
     self.window_builder = self.window_builder.menu(menu);
     self
   }

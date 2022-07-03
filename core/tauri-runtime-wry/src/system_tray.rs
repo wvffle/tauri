@@ -27,10 +27,8 @@ use tauri_runtime::{menu::MenuHash, UserEvent};
 
 use uuid::Uuid;
 
-use std::{
-  collections::HashMap,
-  sync::{Arc, Mutex},
-};
+use parking_lot::Mutex;
+use std::{collections::HashMap, sync::Arc};
 
 pub type SystemTrayEventHandler = Box<dyn Fn(&SystemTrayEvent) + Send>;
 pub type SystemTrayEventListeners = Arc<Mutex<HashMap<Uuid, Arc<SystemTrayEventHandler>>>>;

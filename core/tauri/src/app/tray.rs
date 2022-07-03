@@ -15,10 +15,8 @@ pub use crate::{
 
 use tauri_macros::default_runtime;
 
-use std::{
-  collections::HashMap,
-  sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
+use parking_lot::Mutex;
 
 pub(crate) fn get_menu_ids(map: &mut HashMap<MenuHash, MenuId>, menu: &SystemTrayMenu) {
   for item in &menu.items {
@@ -119,7 +117,7 @@ impl<R: Runtime> Clone for SystemTrayMenuItemHandle<R> {
 impl<R: Runtime> SystemTrayHandle<R> {
   /// Gets a handle to the menu item that has the specified `id`.
   pub fn get_item(&self, id: MenuIdRef<'_>) -> SystemTrayMenuItemHandle<R> {
-    let ids = self.ids.lock().unwrap();
+    let ids = self.ids.lock();
     let iter = ids.iter();
     for (raw, item_id) in iter {
       if item_id == id {
@@ -142,7 +140,7 @@ impl<R: Runtime> SystemTrayHandle<R> {
     let mut ids = HashMap::new();
     get_menu_ids(&mut ids, &menu);
     self.inner.set_menu(menu)?;
-    *self.ids.lock().unwrap() = ids;
+    *self.ids.lock() = ids;
     Ok(())
   }
 

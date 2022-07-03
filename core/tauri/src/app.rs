@@ -59,6 +59,8 @@ pub(crate) type GlobalMenuEventListener<R> = Box<dyn Fn(WindowMenuEvent<R>) + Se
 pub(crate) type GlobalWindowEventListener<R> = Box<dyn Fn(GlobalWindowEvent<R>) + Send + Sync>;
 #[cfg(feature = "system-tray")]
 type SystemTrayEventListener<R> = Box<dyn Fn(&AppHandle<R>, tray::SystemTrayEvent) + Send + Sync>;
+#[cfg(feature = "system-tray")]
+use parking_lot::Mutex;
 
 /// Api exposed on the `ExitRequested` event.
 #[derive(Debug)]
@@ -453,7 +455,6 @@ impl<R: Runtime> AppHandle<R> {
       .inner
       .plugins
       .lock()
-      .unwrap()
       .register(plugin);
     Ok(())
   }
@@ -489,7 +490,6 @@ impl<R: Runtime> AppHandle<R> {
       .inner
       .plugins
       .lock()
-      .unwrap()
       .unregister(plugin)
   }
 
@@ -1492,7 +1492,7 @@ impl<R: Runtime> Builder<R> {
         .expect("failed to run tray");
 
       let tray_handle = tray::SystemTrayHandle {
-        ids: Arc::new(std::sync::Mutex::new(ids)),
+        ids: Arc::new(Mutex::new(ids)),
         inner: tray_handler,
       };
       let ids = tray_handle.ids.clone();
@@ -1501,7 +1501,7 @@ impl<R: Runtime> Builder<R> {
       for listener in self.system_tray_event_listeners {
         let app_handle = app.handle();
         let ids = ids.clone();
-        let listener = Arc::new(std::sync::Mutex::new(listener));
+        let listener = Arc::new(Mutex::new(listener));
         app
           .runtime
           .as_mut()
@@ -1510,7 +1510,7 @@ impl<R: Runtime> Builder<R> {
             let app_handle = app_handle.clone();
             let event = match event {
               RuntimeSystemTrayEvent::MenuItemClick(id) => tray::SystemTrayEvent::MenuItemClick {
-                id: ids.lock().unwrap().get(id).unwrap().clone(),
+                id: ids.lock().get(id).unwrap().clone(),
               },
               RuntimeSystemTrayEvent::LeftClick { position, size } => {
                 tray::SystemTrayEvent::LeftClick {
@@ -1532,7 +1532,7 @@ impl<R: Runtime> Builder<R> {
               }
             };
             let listener = listener.clone();
-            listener.lock().unwrap()(&app_handle, event);
+            listener.lock()(&app_handle, event);
           });
       }
     }
@@ -1625,7 +1625,6 @@ fn on_event_loop_event<R: Runtime, F: FnMut(&AppHandle<R>, RunEvent) + 'static>(
     .inner
     .plugins
     .lock()
-    .expect("poisoned plugin store")
     .on_event(app_handle, &event);
 
   if let Some(c) = callback {

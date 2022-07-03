@@ -748,7 +748,6 @@ impl<R: Runtime> Window<R> {
       f(MenuEvent {
         menu_item_id: menu_ids
           .lock()
-          .unwrap()
           .get(&event.menu_item_id)
           .unwrap()
           .clone(),
@@ -1203,7 +1202,6 @@ impl<R: Runtime> Window<R> {
       .window
       .js_event_listeners
       .lock()
-      .unwrap()
       .entry(JsEventListenerKey {
         window_label,
         event,
@@ -1214,7 +1212,7 @@ impl<R: Runtime> Window<R> {
 
   pub(crate) fn unregister_js_listener(&self, id: u64) {
     let mut empty = None;
-    let mut js_listeners = self.window.js_event_listeners.lock().unwrap();
+    let mut js_listeners = self.window.js_event_listeners.lock();
     let iter = js_listeners.iter_mut();
     for (key, ids) in iter {
       if ids.contains(&id) {
@@ -1237,7 +1235,6 @@ impl<R: Runtime> Window<R> {
       .window
       .js_event_listeners
       .lock()
-      .unwrap()
       .contains_key(&JsEventListenerKey {
         window_label,
         event: event.into(),

@@ -26,11 +26,8 @@ use uuid::Uuid;
 #[cfg(windows)]
 use windows::Win32::Foundation::HWND;
 
-use std::{
-  collections::HashMap,
-  fmt,
-  sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, fmt, sync::Arc};
+use parking_lot::Mutex;
 
 type ShortcutMap = HashMap<String, Box<dyn Fn() + Send + 'static>>;
 

@@ -7,9 +7,10 @@ use std::{
   collections::{HashMap, HashSet},
   fmt,
   fs::create_dir_all,
-  sync::{Arc, Mutex, MutexGuard},
+  sync::Arc,
 };
 
+use parking_lot::{Mutex, MutexGuard};
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 use serialize_to_javascript::{default_template, DefaultTemplate, Template};
@@ -327,7 +328,7 @@ impl<R: Runtime> WindowManager<R> {
 
   /// Get a locked handle to the windows.
   pub(crate) fn windows_lock(&self) -> MutexGuard<'_, HashMap<String, Window<R>>> {
-    self.inner.windows.lock().expect("poisoned window manager")
+    self.inner.windows.lock()
   }
 
   /// State managed by the application.
@@ -400,7 +401,6 @@ impl<R: Runtime> WindowManager<R> {
       .inner
       .plugins
       .lock()
-      .expect("poisoned plugin store")
       .initialization_script();
 
     let pattern_init = PatternJavascript {
@@ -463,7 +463,7 @@ impl<R: Runtime> WindowManager<R> {
       let protocol = protocol.clone();
       let app_handle = Mutex::new(app_handle.clone());
       pending.register_uri_scheme_protocol(uri_scheme.clone(), move |p| {
-        (protocol.protocol)(&app_handle.lock().unwrap(), p)
+        (protocol.protocol)(&app_handle.lock(), p)
       });
     }
 
@@ -1019,7 +1019,6 @@ impl<R: Runtime> WindowManager<R> {
       .inner
       .plugins
       .lock()
-      .expect("poisoned plugin store")
       .on_page_load(window, payload);
   }
 
@@ -1028,7 +1027,6 @@ impl<R: Runtime> WindowManager<R> {
       .inner
       .plugins
       .lock()
-      .expect("poisoned plugin store")
       .extend_api(invoke);
   }
 
@@ -1037,7 +1035,6 @@ impl<R: Runtime> WindowManager<R> {
       .inner
       .plugins
       .lock()
-      .expect("poisoned plugin store")
       .initialize(app, &self.inner.config.plugins)
   }
 
@@ -1201,7 +1198,6 @@ impl<R: Runtime> WindowManager<R> {
       manager
         .plugins
         .lock()
-        .expect("poisoned plugin store")
         .created(window_);
     });
 
@@ -1306,7 +1302,7 @@ fn on_window_event<R: Runtime>(
     WindowEvent::Destroyed => {
       window.emit(WINDOW_DESTROYED_EVENT, ())?;
       let label = window.label();
-      let windows_map = manager.inner.windows.lock().unwrap();
+      let windows_map = manager.inner.windows.lock();
       let windows = windows_map.values();
       for window in windows {
         window.eval(&format!(

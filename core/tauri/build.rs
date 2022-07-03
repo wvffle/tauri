@@ -5,7 +5,8 @@
 use heck::ToSnakeCase;
 use once_cell::sync::OnceCell;
 
-use std::{path::Path, sync::Mutex};
+use std::path::Path;
+use std::sync::Mutex;
 
 static CHECKED_FEATURES: OnceCell<Mutex<Vec<String>>> = OnceCell::new();
 
