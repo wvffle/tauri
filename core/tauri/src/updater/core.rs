@@ -14,6 +14,7 @@ use http::{
   header::{HeaderName, HeaderValue},
   HeaderMap, StatusCode,
 };
+use log::{trace, debug};
 use minisign_verify::{PublicKey, Signature};
 use semver::Version;
 use serde::{de::Error as DeError, Deserialize, Deserializer, Serialize};
@@ -329,15 +330,20 @@ impl<R: Runtime> UpdateBuilder<R> {
     // If no executable path provided, we use current_exe from tauri_utils
     let executable_path = self.executable_path.unwrap_or(current_exe()?);
 
+    trace!("Determining machine arch...");
     let arch = get_updater_arch().ok_or(Error::UnsupportedArch)?;
+    debug!("Machine arch is {}", arch);
+
     // `target` is the `{{target}}` variable we replace in the endpoint
     // `json_target` is the value we search if the updater server returns a JSON with the `platforms` object
+    trace!("Constructing platform...");
     let (target, json_target) = if let Some(target) = self.target {
       (target.clone(), target)
     } else {
       let target = get_updater_target().ok_or(Error::UnsupportedOs)?;
       (target.to_string(), format!("{}-{}", target, arch))
     };
+    trace!("Platform is {} and json platform value is {}", target, json_target);
 
     // Get the extract_path from the provided executable_path
     let extract_path = extract_path_from_executable(&self.app.state::<Env>(), &executable_path);
@@ -374,15 +380,17 @@ impl<R: Runtime> UpdateBuilder<R> {
         .replace("{{target}}", &target)
         .replace("{{arch}}", arch);
 
+      debug!("Fetching release information from {}...", fixed_link);
       let mut request = HttpRequestBuilder::new("GET", &fixed_link)?.headers(headers.clone());
       if let Some(timeout) = self.timeout {
         request = request.timeout(timeout);
       }
       let resp = ClientBuilder::new().build()?.send(request).await;
-
       // If we got a success, we stop the loop
       // and we set our remote_release variable
       if let Ok(res) = resp {
+        trace!("Got response {:?}", &res);
+
         let res = res.read().await?;
         // got status code 2XX
         if StatusCode::from_u16(res.status)
@@ -391,10 +399,13 @@ impl<R: Runtime> UpdateBuilder<R> {
         {
           // if we got 204
           if StatusCode::NO_CONTENT.as_u16() == res.status {
+            debug!("Endpoint returned HTTP status code 204. Already up to date.");
             // return with `UpToDate` error
             // we should catch on the client
             return Err(Error::UpToDate);
           };
+
+          trace!("Parsing remote release information from JSON response...");
           // Convert the remote result to our local struct
           let built_release = serde_json::from_value(res.data).map_err(Into::into);
           // make sure all went well and the remote data is compatible
@@ -405,7 +416,11 @@ impl<R: Runtime> UpdateBuilder<R> {
               remote_release = Some(release);
               break;
             }
-            Err(err) => last_error = Some(err),
+            Err(err) => {
+              debug!("Failed to parse JSON response. Error: {}", err);
+
+              last_error = Some(err)
+            },
           }
         } // if status code is not 2XX we keep loopin' our urls
       }
@@ -420,12 +435,16 @@ impl<R: Runtime> UpdateBuilder<R> {
     // Extracted remote metadata
     let final_release = remote_release.ok_or(Error::ReleaseNotFound)?;
 
+    debug!("Successfully parsed JSON response. {:?}", &final_release);
+
+    trace!("Determining if we should update. Current version is {}, remote version is {}.", &self.current_version, final_release.version());
     // is the announced version greater than our current one?
     let should_update = if let Some(comparator) = self.should_install.take() {
       comparator(&self.current_version, &final_release)
     } else {
       final_release.version() > &self.current_version
     };
+    debug!("Should update: {}", should_update);
 
     headers.remove("Accept");
 
@@ -538,13 +557,17 @@ impl<R: Runtime> Update<R> {
     );
 
     let client = ClientBuilder::new().build()?;
+
+
     // Create our request
+    debug!("Fetching update from {}...", self.download_url);
     let mut req = HttpRequestBuilder::new("GET", self.download_url.as_str())?.headers(headers);
     if let Some(timeout) = self.timeout {
       req = req.timeout(timeout);
     }
 
     let response = client.send(req).await?;
+    trace!("Got response {:?}", &response);
 
     // make sure it's success
     if !response.status().is_success() {
@@ -559,7 +582,9 @@ impl<R: Runtime> Update<R> {
       .get("Content-Length")
       .and_then(|value| value.to_str().ok())
       .and_then(|value| value.parse().ok());
+    trace!("Size update in bytes: {:?}", content_length);
 
+    debug!("Downloading update...");
     let mut buffer = Vec::new();
     #[cfg(feature = "reqwest-client")]
     {
@@ -568,6 +593,7 @@ impl<R: Runtime> Update<R> {
       while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         let bytes = chunk.as_ref().to_vec();
+        trace!("Download progress: {} of {:?} bytes", buffer.len(), content_length);
         on_chunk(bytes.len(), content_length);
         buffer.extend(bytes);
       }
@@ -583,6 +609,7 @@ impl<R: Runtime> Update<R> {
               break;
             } else {
               let bytes = buf[0..b].to_vec();
+              trace!("Download progress: {} of {:?} bytes", buffer.len(), content_length);
               on_chunk(bytes.len(), content_length);
               buffer.extend(bytes);
             }
@@ -592,14 +619,17 @@ impl<R: Runtime> Update<R> {
       }
     }
 
+    debug!("Download finished");
     on_download_finish();
 
     // create memory buffer from our archive (Seek + Read)
     let mut archive_buffer = Cursor::new(buffer);
 
+    debug!("Verifying signature...");
     // We need an announced signature by the server
     // if there is no signature, bail out.
     verify_signature(&mut archive_buffer, &self.signature, &pub_key)?;
+    debug!("Signature valid.");
 
     // TODO: implement updater in mobile
     #[cfg(desktop)]
@@ -668,6 +698,7 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, extract_path: &Path) ->
         let tmp_app_image = &tmp_dir.path().join("current_app.AppImage");
 
         // create a backup of our current app image
+        trace!("Backing up current app to {:?}", tmp_dir.path());
         Move::from_source(extract_path).to_dest(tmp_app_image)?;
 
         // extract the buffer to the tmp_dir
@@ -675,11 +706,14 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, extract_path: &Path) ->
         let mut extractor =
           Extract::from_cursor(archive_buffer, ArchiveFormat::Tar(Some(Compression::Gz)));
 
+        debug!("Extracting update...");
         return extractor
           .with_files(|entry| {
             let path = entry.path()?;
             if path.extension() == Some(OsStr::new("AppImage")) {
               // if something went wrong during the extraction, we should restore previous app
+              debug!("Failed to extract entry, rolling back changes...");
+
               if let Err(err) = entry.extract(extract_path) {
                 Move::from_source(tmp_app_image).to_dest(extract_path)?;
                 return Err(crate::api::Error::Extract(err.to_string()));
@@ -732,6 +766,7 @@ fn copy_files_and_run<R: Read + Seek>(
   // we extract our signed archive into our final directory without any temp file
   let mut extractor = Extract::from_cursor(archive_buffer, ArchiveFormat::Zip);
 
+  debug!("Extracting update into temporary directory {:?}...", tmp_dir.path());
   // extract the msi
   extractor.extract_into(&tmp_dir)?;
 
@@ -801,7 +836,7 @@ fn copy_files_and_run<R: Read + Seek>(
       msi_path_arg.push(&found_path);
       msi_path_arg.push("\"\"\"");
 
-      // run the installer and relaunch the application
+      debug!("Run installer and relaunch application...");
       let system_root = std::env::var("SYSTEMROOT");
       let powershell_path = system_root.as_ref().map_or_else(
         |_| "powershell.exe".to_string(),
@@ -823,6 +858,7 @@ fn copy_files_and_run<R: Read + Seek>(
         .arg(current_exe_arg)
         .spawn();
       if powershell_install_res.is_err() {
+        debug!("Installler or relaunch failed with error {}. Running installer directly...", err);
         // fallback to running msiexec directly - relaunch won't be available
         // we use this here in case powershell fails in an older machine somehow
         let msiexec_path = system_root.as_ref().map_or_else(
@@ -865,9 +901,11 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, extract_path: &Path) ->
     .prefix("tauri_current_app")
     .tempdir()?;
 
+  trace!("Backing up current app to {:?}", tmp_dir.path());
   // create backup of our current app
   Move::from_source(extract_path).to_dest(tmp_dir.path())?;
 
+  debug!("Extracting update...");
   // extract all the files
   extractor.with_files(|entry| {
     let path = entry.path()?;
@@ -877,6 +915,8 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, extract_path: &Path) ->
 
     // if something went wrong during the extraction, we should restore previous app
     if let Err(err) = entry.extract(&extraction_path) {
+      debug!("Failed to extract entry, rolling back changes...");
+
       for file in &extracted_files {
         // delete all the files we extracted
         if file.is_dir() {
@@ -988,9 +1028,12 @@ pub fn verify_signature<R>(
 where
   R: Read,
 {
+  trace!("decoding public key...");
   // we need to convert the pub key
   let pub_key_decoded = base64_to_string(pub_key)?;
   let public_key = PublicKey::decode(&pub_key_decoded)?;
+
+  trace!("decoding signature...");
   let signature_base64_decoded = base64_to_string(release_signature)?;
   let signature = Signature::decode(&signature_base64_decoded)?;
 
@@ -998,7 +1041,7 @@ where
   let mut data = Vec::new();
   archive_reader.read_to_end(&mut data)?;
 
-  println!("verify signature. data {:?} signature {:?}", &data, &signature_base64_decoded);
+  debug!("Verifying signature {:?} with publickey {:?} and data {:?}", &signature_base64_decoded, &pub_key_decoded, &data);
 
   // Validate signature or bail out
   public_key.verify(&data, &signature, true)?;
