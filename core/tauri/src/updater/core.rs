@@ -998,6 +998,8 @@ where
   let mut data = Vec::new();
   archive_reader.read_to_end(&mut data)?;
 
+  println!("verify signature. data {:?} signature {:?}", &data, &signature_base64_decoded);
+
   // Validate signature or bail out
   public_key.verify(&data, &signature, true)?;
   Ok(true)
