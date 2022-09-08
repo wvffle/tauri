@@ -449,6 +449,7 @@ mod error;
 use std::time::Duration;
 
 use http::header::{HeaderName, HeaderValue};
+use log::{error, info, debug};
 use semver::Version;
 use time::OffsetDateTime;
 
@@ -832,6 +833,7 @@ pub(crate) fn listener<R: Runtime>(handle: AppHandle<R>) {
 pub(crate) async fn download_and_install<R: Runtime>(update: core::Update<R>) -> Result<()> {
   // Start installation
   // emit {"status": "PENDING"}
+  info!("Update pending.");
   send_status_update(&update.app, UpdaterEvent::Pending);
 
   let handle = update.app.clone();
@@ -848,6 +850,7 @@ pub(crate) async fn download_and_install<R: Runtime>(update: core::Update<R>) ->
         send_download_progress_event(&handle, chunk_length, content_length);
       },
       move || {
+        info!("Update downloaded.");
         send_status_update(&handle_, UpdaterEvent::Downloaded);
       },
     )
@@ -855,8 +858,10 @@ pub(crate) async fn download_and_install<R: Runtime>(update: core::Update<R>) ->
 
   if let Err(err) = &update_result {
     // emit {"status": "ERROR", "error": "The error message"}
+    error!("Update failed with error {}.", err);
     send_status_update(&update.app, UpdaterEvent::Error(err.to_string()));
   } else {
+    info!("Update done!");
     // emit {"status": "DONE"}
     send_status_update(&update.app, UpdaterEvent::Updated);
   }

@@ -1041,7 +1041,7 @@ where
   let mut data = Vec::new();
   archive_reader.read_to_end(&mut data)?;
 
-  debug!("Verifying signature {:?} with publickey {:?} and data {:?}", &signature_base64_decoded, &pub_key_decoded, &data);
+  debug!("Verifying signature {:?} with publickey {:?}", &signature_base64_decoded, &pub_key_decoded);
 
   // Validate signature or bail out
   public_key.verify(&data, &signature, true)?;
