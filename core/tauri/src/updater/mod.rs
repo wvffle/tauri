@@ -801,16 +801,20 @@ pub(crate) async fn check_update_with_dialog<R: Runtime>(handle: AppHandle<R>) {
 
         // if dialog enabled only
         if updater.should_update && updater_config.dialog {
+          debug!("Showing native updater dialog...");
+
           let body = updater.body.clone().unwrap_or_else(|| String::from(""));
           let dialog =
             prompt_for_install(&updater.clone(), &package_info.name, &body.clone(), pubkey).await;
 
           if let Err(e) = dialog {
+            error!("Update failed with error {}.", e);
             send_status_update(&handle, UpdaterEvent::Error(e.to_string()));
           }
         }
       }
       Err(e) => {
+        error!("Update failed with error {}.", e);
         send_status_update(&handle, UpdaterEvent::Error(e.to_string()));
       }
     }
