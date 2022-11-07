@@ -818,7 +818,6 @@ pub(crate) mod sealed {
 }
 
 /// Utilities for unit testing on Tauri applications.
-#[cfg(test)]
 pub mod test;
 
 #[cfg(test)]
