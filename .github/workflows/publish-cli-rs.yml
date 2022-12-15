@@ -16,7 +16,7 @@ jobs:
         target:
           - {
               name: 'x86_64-unknown-linux-gnu',
-              platform: 'ubuntu-18.04',
+              platform: 'ubuntu-20.04',
               ext: ''
             }
           - { name: 'x86_64-apple-darwin', platform: 'macos-latest', ext: '' }
