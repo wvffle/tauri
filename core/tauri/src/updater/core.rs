@@ -713,6 +713,8 @@ fn copy_files_and_run<R: Read + Seek>(
   with_elevated_task: bool,
   config: &crate::Config,
 ) -> Result {
+  use std::os::windows::process::CommandExt;
+
   // FIXME: We need to create a memory buffer with the MSI and then run it.
   //        (instead of extracting the MSI to a temp path)
   //
@@ -818,6 +820,7 @@ fn copy_files_and_run<R: Read + Seek>(
         |p| format!("{p}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
       );
       let powershell_install_res = Command::new(powershell_path)
+        .creation_flags(0x08000000)
         .args(["-NoProfile", "-windowstyle", "hidden"])
         .args([
           "Start-Process",
