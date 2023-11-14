@@ -591,12 +591,16 @@ impl<R: Runtime> Update<R> {
 
     on_download_finish();
 
+    println!("download finished");
+
     // create memory buffer from our archive (Seek + Read)
     let mut archive_buffer = Cursor::new(buffer);
 
     // We need an announced signature by the server
     // if there is no signature, bail out.
     verify_signature(&mut archive_buffer, &self.signature, &pub_key)?;
+
+    println!("sig verified");
 
     // TODO: implement updater in mobile
     #[cfg(desktop)]
@@ -717,6 +721,8 @@ fn copy_files_and_run<R: Read + Seek>(
   // shouldn't drop but we should be able to pass the reference so we can drop it once the installation
   // is done, otherwise we have a huge memory leak.
 
+  println!("copy_files_and_run");
+
   let tmp_dir = tempfile::Builder::new().tempdir()?.into_path();
 
   // extract the buffer to the tmp_dir
@@ -736,6 +742,7 @@ fn copy_files_and_run<R: Read + Seek>(
 
   for path in paths {
     let found_path = path?.path();
+    println!("found_path: {}", &found_path.display());
     // we support 2 type of files exe & msi for now
     // If it's an `exe` we expect an installer not a runtime.
     if found_path.extension() == Some(OsStr::new("exe")) {
@@ -744,6 +751,8 @@ fn copy_files_and_run<R: Read + Seek>(
       installer_arg.push("\"");
       installer_arg.push(&found_path);
       installer_arg.push("\"");
+
+      println!("setup.exe");
 
       // Run the EXE
       Command::new(powershell_path)
@@ -772,7 +781,10 @@ fn copy_files_and_run<R: Read + Seek>(
 
       exit(0);
     } else if found_path.extension() == Some(OsStr::new("msi")) {
+      println!("msi");
+
       if with_elevated_task {
+        println!("with_elevated_task");
         if let Some(bin_name) = current_exe()
           .ok()
           .and_then(|pb| pb.file_name().map(|s| s.to_os_string()))
