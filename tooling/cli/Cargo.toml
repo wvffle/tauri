@@ -55,9 +55,9 @@ json-patch = "1.2"
 tauri-utils = { version = "1.5.0", path = "../../core/tauri-utils", features = [ "isolation", "schema", "config-json5", "config-toml" ] }
 toml = "0.8"
 jsonschema = "0.17"
-handlebars = "4.4"
+handlebars = "4.5"
 include_dir = "0.7"
-minisign = "=0.7.3"
+minisign = "=0.7.5"
 base64 = "0.21.5"
 ureq = { version = "2.8", default-features = false, features = [ "gzip" ] }
 os_info = "3"
@@ -72,7 +72,7 @@ os_pipe = "1"
 ignore = "0.4"
 ctrlc = "3.4"
 log = { version = "0.4.20", features = [ "kv_unstable", "kv_unstable_std" ] }
-env_logger = "0.10.0"
+env_logger = "0.10.1"
 icns = { package = "tauri-icns", version = "0.1" }
 image = { version = "0.24", default-features = false, features = [ "ico" ] }
 axum = { version = "0.6.20", features = [ "ws" ] }
@@ -81,7 +81,7 @@ kuchiki = { package = "kuchikiki", version = "0.8" }
 tokio = { version = "1", features = [ "macros", "sync" ] }
 common-path = "1"
 serde-value = "0.7.0"
-itertools = "0.11"
+itertools = "0.12"
 
 [target."cfg(windows)".dependencies]
 winapi = { version = "0.3", features = [ "handleapi", "processenv", "winbase", "wincon", "winnt" ] }
