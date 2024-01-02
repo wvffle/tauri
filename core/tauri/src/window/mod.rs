@@ -1101,6 +1101,12 @@ unsafe impl<R: Runtime> raw_window_handle::HasRawWindowHandle for Window<R> {
   }
 }
 
+unsafe impl<R: Runtime> raw_window_handle::HasRawDisplayHandle for Window<R> {
+  fn raw_display_handle(&self) -> raw_window_handle::RawDisplayHandle {
+    self.app_handle.raw_display_handle()
+  }
+}
+
 impl<R: Runtime> Clone for Window<R> {
   fn clone(&self) -> Self {
     Self {
