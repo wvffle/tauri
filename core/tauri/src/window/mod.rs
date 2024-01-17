@@ -21,7 +21,7 @@ use crate::{
     CallbackFn, Invoke, InvokeBody, InvokeError, InvokeMessage, InvokeResolver,
     OwnedInvokeResponder,
   },
-  manager::AppManager,
+  manager::{window::JsEventListenerKey, AppManager},
   runtime::{
     monitor::Monitor as RuntimeMonitor,
     webview::{WebviewAttributes, WindowBuilder as _},
@@ -54,7 +54,6 @@ use tauri_macros::default_runtime;
 
 use std::{
   borrow::Cow,
-  collections::{HashMap, HashSet},
   fmt,
   hash::{Hash, Hasher},
   path::PathBuf,
@@ -1034,15 +1033,6 @@ impl<'a, R: Runtime> WindowBuilder<'a, R> {
   }
 }
 
-/// Key for a JS event listener.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct JsEventListenerKey {
-  /// The associated window label.
-  pub window_label: Option<String>,
-  /// The event name.
-  pub event: String,
-}
-
 /// The IPC invoke request.
 #[derive(Debug)]
 pub struct InvokeRequest {
@@ -1078,7 +1068,6 @@ pub struct Window<R: Runtime> {
   /// The manager to associate this webview window with.
   pub(crate) manager: Arc<AppManager<R>>,
   pub(crate) app_handle: AppHandle<R>,
-  js_event_listeners: Arc<Mutex<HashMap<JsEventListenerKey, HashSet<EventId>>>>,
   // The menu set for this window
   #[cfg(desktop)]
   pub(crate) menu: Arc<Mutex<Option<WindowMenu<R>>>>,
@@ -1090,7 +1079,6 @@ impl<R: Runtime> std::fmt::Debug for Window<R> {
       .field("window", &self.window)
       .field("manager", &self.manager)
       .field("app_handle", &self.app_handle)
-      .field("js_event_listeners", &self.js_event_listeners)
       .finish()
   }
 }
@@ -1107,7 +1095,6 @@ impl<R: Runtime> Clone for Window<R> {
       window: self.window.clone(),
       manager: self.manager.clone(),
       app_handle: self.app_handle.clone(),
-      js_event_listeners: self.js_event_listeners.clone(),
       #[cfg(desktop)]
       menu: self.menu.clone(),
     }
@@ -1284,7 +1271,6 @@ impl<R: Runtime> Window<R> {
       window,
       manager,
       app_handle,
-      js_event_listeners: Default::default(),
       #[cfg(desktop)]
       menu: Arc::new(Mutex::new(menu)),
     }
@@ -2463,9 +2449,13 @@ impl<R: Runtime> Window<R> {
     ))?;
 
     self
+      .manager
+      .window
       .js_event_listeners
       .lock()
       .unwrap()
+      .entry(self.label().to_string())
+      .or_default()
       .entry(JsEventListenerKey {
         window_label,
         event,
@@ -2485,20 +2475,22 @@ impl<R: Runtime> Window<R> {
     ))?;
 
     let mut empty = None;
-    let mut js_listeners = self.js_event_listeners.lock().unwrap();
-    let iter = js_listeners.iter_mut();
-    for (key, ids) in iter {
-      if ids.contains(&id) {
-        ids.remove(&id);
-        if ids.is_empty() {
-          empty.replace(key.clone());
+    let mut window_js_listeners = self.manager.window.js_event_listeners.lock().unwrap();
+    if let Some(js_listeners) = window_js_listeners.get_mut(self.label()) {
+      let iter = js_listeners.iter_mut();
+      for (key, ids) in iter {
+        if ids.contains(&id) {
+          ids.remove(&id);
+          if ids.is_empty() {
+            empty.replace(key.clone());
+          }
+          break;
         }
-        break;
       }
-    }
 
-    if let Some(key) = empty {
-      js_listeners.remove(&key);
+      if let Some(key) = empty {
+        js_listeners.remove(&key);
+      }
     }
 
     Ok(())
@@ -2514,22 +2506,51 @@ impl<R: Runtime> Window<R> {
 
   /// Whether this window registered a listener to an event from the given window and event name.
   pub(crate) fn has_js_listener(&self, window_label: Option<String>, event: &str) -> bool {
-    let listeners = self.js_event_listeners.lock().unwrap();
+    let js_event_listeners = self.manager.window.js_event_listeners.lock().unwrap();
 
-    if let Some(label) = window_label {
-      let event = event.to_string();
-      // window-specific event is also triggered on global events, so we check that
-      listeners.contains_key(&JsEventListenerKey {
-        window_label: Some(label),
-        event: event.clone(),
-      }) || listeners.contains_key(&JsEventListenerKey {
-        window_label: None,
-        event,
-      })
+    if let Some(listeners) = js_event_listeners.get(self.label()) {
+      if let Some(label) = window_label {
+        let event = event.to_string();
+
+        let key = JsEventListenerKey {
+          window_label: Some(label),
+          event: event.clone(),
+        };
+
+        let key2 = JsEventListenerKey {
+          window_label: None,
+          event,
+        };
+
+        // window-specific event is also triggered on global events, so we check that
+        listeners.contains_key(&key) || listeners.contains_key(&key2)
+      } else {
+        // for global events, any listener is triggered
+        listeners.keys().any(|k| k.event == event)
+      }
     } else {
-      // for global events, any listener is triggered
-      listeners.keys().any(|k| k.event == event)
+      false
     }
+  }
+
+  /// Whether this window has a registered listener to an event from any window.
+  pub(crate) fn has_any_js_listener(&self, event: &str) -> bool {
+    let event = event.to_string();
+
+    let key = JsEventListenerKey {
+      window_label: Some(self.label().to_string()),
+      event: event.clone(),
+    };
+
+    let key2 = JsEventListenerKey {
+      window_label: None,
+      event,
+    };
+
+    let js_event_listeners = self.manager.window.js_event_listeners.lock().unwrap();
+    js_event_listeners
+      .values()
+      .any(|listeners| listeners.contains_key(&key) || listeners.contains_key(&key2))
   }
 
   /// Opens the developer tools window (Web Inspector).

@@ -252,6 +252,7 @@ impl<R: Runtime> AppManager<R> {
         default_icon: context.default_window_icon,
         uri_scheme_protocols: Mutex::new(uri_scheme_protocols),
         event_listeners: Arc::new(window_event_listeners),
+        js_event_listeners: Default::default(),
         invoke_responder,
         invoke_initialization_script,
       },

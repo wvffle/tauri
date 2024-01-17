@@ -28,7 +28,7 @@ use crate::{
   ipc::{InvokeHandler, InvokeResponder},
   pattern::PatternJavascript,
   window::PageLoadPayload,
-  AppHandle, EventLoopMessage, Icon, Manager, Runtime, Scopes, Window, WindowEvent,
+  AppHandle, EventId, EventLoopMessage, Icon, Manager, Runtime, Scopes, Window, WindowEvent,
 };
 
 use super::AppManager;
@@ -76,6 +76,15 @@ pub struct UriSchemeProtocol<R: Runtime> {
     Box<dyn Fn(&AppHandle<R>, http::Request<Vec<u8>>, UriSchemeResponder) + Send + Sync>,
 }
 
+/// Key for a JS event listener.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct JsEventListenerKey {
+  /// The associated window label.
+  pub window_label: Option<String>,
+  /// The event name.
+  pub event: String,
+}
+
 pub struct WindowManager<R: Runtime> {
   pub windows: Mutex<HashMap<String, Window<R>>>,
   /// The JS message handler.
@@ -88,6 +97,9 @@ pub struct WindowManager<R: Runtime> {
 
   /// Window event listeners to all windows.
   pub event_listeners: Arc<Vec<GlobalWindowEventListener<R>>>,
+  /// JS event listeners for all windows.
+  pub js_event_listeners:
+    Arc<Mutex<HashMap<String, HashMap<JsEventListenerKey, HashSet<EventId>>>>>,
 
   /// Responder for invoke calls.
   pub invoke_responder: Option<Arc<InvokeResponder<R>>>,
@@ -640,7 +652,7 @@ fn on_window_event<R: Runtime>(
     WindowEvent::Resized(size) => window.emit(WINDOW_RESIZED_EVENT, size)?,
     WindowEvent::Moved(position) => window.emit(WINDOW_MOVED_EVENT, position)?,
     WindowEvent::CloseRequested { api } => {
-      if window.has_js_listener(Some(window.label().into()), WINDOW_CLOSE_REQUESTED_EVENT) {
+      if window.has_any_js_listener(WINDOW_CLOSE_REQUESTED_EVENT) {
         api.prevent_close();
       }
       window.emit(WINDOW_CLOSE_REQUESTED_EVENT, ())?;
