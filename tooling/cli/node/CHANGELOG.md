@@ -1,5 +1,15 @@
 # Changelog
 
+## \[1.5.10]
+
+### Bug Fixes
+
+- [`67d7877f`](https://www.github.com/tauri-apps/tauri/commit/67d7877f27f265c133a70d48a46c83ffff31d571)([#8520](https://www.github.com/tauri-apps/tauri/pull/8520)) The cli now also watches cargo workspace members if the tauri folder is the workspace root.
+
+### Dependencies
+
+- Upgraded to `tauri-cli@1.5.10`
+
 ## \[1.5.9]
 
 ### Bug Fixes
