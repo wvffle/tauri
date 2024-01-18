@@ -85,6 +85,8 @@ pub struct JsEventListenerKey {
   pub event: String,
 }
 
+type WindowJsEeventListeners = HashMap<JsEventListenerKey, HashSet<EventId>>;
+
 pub struct WindowManager<R: Runtime> {
   pub windows: Mutex<HashMap<String, Window<R>>>,
   /// The JS message handler.
@@ -98,8 +100,7 @@ pub struct WindowManager<R: Runtime> {
   /// Window event listeners to all windows.
   pub event_listeners: Arc<Vec<GlobalWindowEventListener<R>>>,
   /// JS event listeners for all windows.
-  pub js_event_listeners:
-    Arc<Mutex<HashMap<String, HashMap<JsEventListenerKey, HashSet<EventId>>>>>,
+  pub js_event_listeners: Arc<Mutex<HashMap<String, WindowJsEeventListeners>>>,
 
   /// Responder for invoke calls.
   pub invoke_responder: Option<Arc<InvokeResponder<R>>>,
