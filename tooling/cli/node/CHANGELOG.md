@@ -1,5 +1,19 @@
 # Changelog
 
+## \[2.0.0-alpha.22]
+
+### New Features
+
+- [`1878766f`](https://www.github.com/tauri-apps/tauri/commit/1878766f7f81a03b0f0b87ec33ee113d7aa7a902)([#8667](https://www.github.com/tauri-apps/tauri/pull/8667)) Migrate the allowlist config to the new capability file format.
+
+### Bug Fixes
+
+- [`9cb9aa79`](https://www.github.com/tauri-apps/tauri/commit/9cb9aa7978f231f7da238b33d6ab33fdd2d2c842)([#8672](https://www.github.com/tauri-apps/tauri/pull/8672)) Allow license field in Cargo.toml to be `{ workspace = true }`
+
+### Dependencies
+
+- Upgraded to `tauri-cli@2.0.0-alpha.22`
+
 ## \[2.0.0-alpha.21]
 
 ### New Features
